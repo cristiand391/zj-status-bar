@@ -32,7 +32,11 @@ pub fn render_tab(
         ThemeHue::Light => palette.black,
     };
     let background_color = if tab.active {
-        palette.green
+        if tab.is_fullscreen_active {
+            palette.orange
+        } else {
+            palette.green
+        }
     } else if is_alternate_tab {
         alternate_tab_color
     } else {
