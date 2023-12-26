@@ -117,6 +117,10 @@ impl ZellijPlugin for State {
                 is_swap_layout_dirty = t.is_swap_layout_dirty;
                 active_swap_layout_name = t.active_swap_layout_name.clone();
             }
+
+            // insert tab index
+            tabname.insert_str(0, &format!("{} ", t.position + 1));
+
             let tab = tab_style(
                 tabname,
                 t,
