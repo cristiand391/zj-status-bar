@@ -42,6 +42,9 @@ impl ZellijPlugin for State {
             EventType::Mouse,
             EventType::PermissionRequestResult,
         ]);
+        // Set as selectable on load so user can accept/deny perms.
+        // After the first load, if the user allowed access, the perm event handler
+        // in `update` will always set it as unselectable.
         set_selectable(true);
     }
 
@@ -53,7 +56,7 @@ impl ZellijPlugin for State {
                     should_render = true;
                 }
                 self.mode_info = mode_info
-            },
+            }
             Event::TabUpdate(tabs) => {
                 if let Some(active_tab_index) = tabs.iter().position(|t| t.active) {
                     // tabs are indexed starting from 1 so we need to add 1
@@ -66,25 +69,29 @@ impl ZellijPlugin for State {
                 } else {
                     eprintln!("Could not find active tab.");
                 }
-            },
+            }
             Event::Mouse(me) => match me {
                 Mouse::LeftClick(_, col) => {
                     let tab_to_focus = get_tab_to_focus(&self.tab_line, self.active_tab_idx, col);
                     if let Some(idx) = tab_to_focus {
                         switch_tab_to(idx.try_into().unwrap());
                     }
-                },
+                }
                 Mouse::ScrollUp(_) => {
                     switch_tab_to(min(self.active_tab_idx + 1, self.tabs.len()) as u32);
-                },
+                }
                 Mouse::ScrollDown(_) => {
                     switch_tab_to(max(self.active_tab_idx.saturating_sub(1), 1) as u32);
-                },
-                _ => {},
+                }
+                _ => {}
+            },
+            Event::PermissionRequestResult(result) => match result {
+                PermissionStatus::Granted => set_selectable(false),
+                PermissionStatus::Denied => eprintln!("Permission denied by user."),
             },
             _ => {
                 eprintln!("Got unrecognized event: {:?}", event);
-            },
+            }
         };
         should_render
     }
@@ -143,10 +150,10 @@ impl ZellijPlugin for State {
         match background {
             PaletteColor::Rgb((r, g, b)) => {
                 print!("{}\u{1b}[48;2;{};{};{}m\u{1b}[0K", output, r, g, b);
-            },
+            }
             PaletteColor::EightBit(color) => {
                 print!("{}\u{1b}[48;5;{}m\u{1b}[0K", output, color);
-            },
+            }
         }
     }
 }

@@ -379,7 +379,7 @@ fn swap_layout_status(
             } else {
                 None
             }
-        },
+        }
         None => None,
     }
 }
