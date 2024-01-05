@@ -17,28 +17,15 @@ fn cursors(focused_clients: &[ClientId], palette: Palette) -> (Vec<ANSIString>, 
     (cursors, len)
 }
 
-pub fn render_tab(
-    text: String,
-    tab: &TabInfo,
-    is_alternate_tab: bool,
-    palette: Palette,
-    separator: &str,
-) -> LinePart {
+pub fn render_tab(text: String, tab: &TabInfo, palette: Palette, separator: &str) -> LinePart {
     let focused_clients = tab.other_focused_clients.as_slice();
     let separator_width = separator.width();
-    let alternate_tab_color = match palette.theme_hue {
-        // TODO: only do this if we don't have the arrow capabilities
-        ThemeHue::Dark => palette.white,
-        ThemeHue::Light => palette.black,
-    };
     let background_color = if tab.active {
         if tab.is_fullscreen_active {
             palette.orange
         } else {
             palette.green
         }
-    } else if is_alternate_tab {
-        alternate_tab_color
     } else {
         palette.fg
     };
@@ -91,7 +78,6 @@ pub fn render_tab(
 pub fn tab_style(
     mut tabname: String,
     tab: &TabInfo,
-    mut is_alternate_tab: bool,
     palette: Palette,
     capabilities: PluginCapabilities,
 ) -> LinePart {
@@ -99,12 +85,8 @@ pub fn tab_style(
     if tab.is_sync_panes_active {
         tabname.push_str(" (Sync)");
     }
-    // we only color alternate tabs differently if we can't use the arrow fonts to separate them
-    if !capabilities.arrow_fonts {
-        is_alternate_tab = false;
-    }
 
-    render_tab(tabname, tab, is_alternate_tab, palette, separator)
+    render_tab(tabname, tab, palette, separator)
 }
 
 pub(crate) fn get_tab_to_focus(

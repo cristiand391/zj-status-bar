@@ -174,15 +174,8 @@ fn tab_line_prefix(
     session_name: Option<&str>,
     mode: InputMode,
     palette: Palette,
-    cols: usize,
+    _cols: usize,
 ) -> Vec<LinePart> {
-    let prefix_text = " Zellij ".to_string();
-
-    let prefix_text_len = prefix_text.chars().count();
-    let text_color = match palette.theme_hue {
-        ThemeHue::Dark => palette.white,
-        ThemeHue::Light => palette.black,
-    };
     let bg_color = match palette.theme_hue {
         ThemeHue::Dark => palette.black,
         ThemeHue::Light => palette.white,
@@ -192,27 +185,21 @@ fn tab_line_prefix(
     let normal_mode_color = palette.green;
     let other_modes_color = palette.orange;
 
-    let prefix_styled_text = style!(text_color, bg_color).bold().paint(prefix_text);
-    let mut parts = vec![LinePart {
-        part: prefix_styled_text.to_string(),
-        len: prefix_text_len,
-        tab_index: None,
-    }];
+    let mut parts: Vec<LinePart> = vec![];
+
     if let Some(name) = session_name {
-        let name_part = format!("({}) ", name);
+        let name_part = format!(" {} |", name);
         let name_part_len = name_part.width();
         let text_color = match palette.theme_hue {
             ThemeHue::Dark => palette.white,
             ThemeHue::Light => palette.black,
         };
         let name_part_styled_text = style!(text_color, bg_color).bold().paint(name_part);
-        if cols.saturating_sub(prefix_text_len) >= name_part_len {
-            parts.push(LinePart {
-                part: name_part_styled_text.to_string(),
-                len: name_part_len,
-                tab_index: None,
-            })
-        }
+        parts.push(LinePart {
+            part: name_part_styled_text.to_string(),
+            len: name_part_len,
+            tab_index: None,
+        })
     }
     let mode_part = format!("{:?}", mode).to_uppercase();
     let mode_part_padded = format!("{:^8}", mode_part);
@@ -230,13 +217,11 @@ fn tab_line_prefix(
             .bold()
             .paint(mode_part_padded)
     };
-    if cols.saturating_sub(prefix_text_len) >= mode_part_len {
-        parts.push(LinePart {
-            part: format!("{}", mode_part_styled_text),
-            len: mode_part_len,
-            tab_index: None,
-        })
-    }
+    parts.push(LinePart {
+        part: format!("{}", mode_part_styled_text),
+        len: mode_part_len,
+        tab_index: None,
+    });
     parts
 }
 
