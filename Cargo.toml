@@ -6,7 +6,6 @@ edition = "2021"
 license = "MIT"
 
 [dependencies]
-colored = "2"
 ansi_term = "0.12"
 unicode-width = "0.1.8"
 zellij-tile = "0.39.2"

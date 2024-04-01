@@ -3823,7 +3823,6 @@ name = "zj-status-bar"
 version = "0.1.0"
 dependencies = [
  "ansi_term",
- "colored",
  "unicode-width",
  "zellij-tile",
  "zellij-tile-utils",
