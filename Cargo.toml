@@ -1,6 +1,6 @@
 [package]
 name = "zj-status-bar"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Cristian Dominguez", "Alexander Kenji Berthold <aks.kenji@protonmail.com>" ]
 edition = "2021"
 license = "MIT"
