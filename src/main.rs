@@ -3,6 +3,7 @@ mod tab;
 
 use std::cmp::{max, min};
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::convert::TryInto;
 
 use tab::get_tab_to_focus;
@@ -18,8 +19,15 @@ pub struct LinePart {
     tab_index: Option<usize>,
 }
 
+#[derive(Debug, Default, Clone)]
+struct WatchStatus {
+    viewed: bool,
+    alternate_color: bool,
+}
+
 #[derive(Default)]
 struct State {
+    watch_tab_indexes: HashMap<usize, WatchStatus>,
     tabs: Vec<TabInfo>,
     active_tab_idx: usize,
     mode_info: ModeInfo,
@@ -41,6 +49,7 @@ impl ZellijPlugin for State {
             EventType::ModeUpdate,
             EventType::Mouse,
             EventType::PermissionRequestResult,
+            EventType::Timer, 
         ]);
         // Set as selectable on load so user can accept/deny perms.
         // After the first load, if the user allowed access, the perm event handler
@@ -56,6 +65,26 @@ impl ZellijPlugin for State {
                     should_render = true;
                 }
                 self.mode_info = mode_info
+            }
+            Event::Timer(_) => {
+                let watch_tab_indexes = &self.watch_tab_indexes.clone();
+                
+                let mut fired_timer = false;
+
+                for (tab_idx, watch_status) in watch_tab_indexes {
+                    if !watch_status.viewed {
+                        self.watch_tab_indexes.insert(*tab_idx, WatchStatus {
+                            viewed: false,
+                            alternate_color: !watch_status.alternate_color
+                        });
+
+                        if !fired_timer {
+                            set_timeout(1.0);
+                            should_render = true;
+                            fired_timer = true;
+                        }
+                    }
+                }
             }
             Event::TabUpdate(tabs) => {
                 if let Some(active_tab_index) = tabs.iter().position(|t| t.active) {
@@ -96,6 +125,35 @@ impl ZellijPlugin for State {
         should_render
     }
 
+    fn pipe(&mut self, pipe_message: PipeMessage) -> bool {
+        let mut should_render = false;
+        match pipe_message.source {
+            PipeSource::Cli(_) => {
+                if let Some(payload) = pipe_message.payload {
+                    let empty_map = self.watch_tab_indexes.is_empty();
+
+                    self.watch_tab_indexes.insert(payload.parse().unwrap(), WatchStatus {
+                        viewed: false,
+                        alternate_color: true
+                    }) ;
+                    if empty_map {
+                        set_timeout(1.0);
+                        should_render = true;
+                    }
+                   
+                }
+            }
+            // PipeSource::Plugin(source_plugin_id) => {
+            //     // pipes can also arrive from other plugins
+            // }
+            _ => {
+                should_render = false;
+            }
+        }
+        should_render
+    }
+
+
     fn render(&mut self, _rows: usize, cols: usize) {
         if self.tabs.is_empty() {
             return;
@@ -120,11 +178,22 @@ impl ZellijPlugin for State {
             // insert tab index
             tabname.insert_str(0, &format!("{} ", t.position + 1));
 
+            let mut alternate_color = false;
+
+            if let Some(i) = self.watch_tab_indexes.get(&(&t.position + 1)) {
+                alternate_color = i.alternate_color;
+
+                if t.active {
+                    self.watch_tab_indexes.remove(&(t.position + 1));
+                }
+            }
+
             let tab = tab_style(
                 tabname,
                 t,
                 self.mode_info.style.colors,
                 self.mode_info.capabilities,
+                alternate_color
             );
             all_tabs.push(tab);
         }

@@ -8,5 +8,5 @@ license = "MIT"
 [dependencies]
 ansi_term = "0.12"
 unicode-width = "0.1.8"
-zellij-tile = "0.39.2"
-zellij-tile-utils = "0.39.2"
+zellij-tile = "0.40.0"
+zellij-tile-utils = "0.40.0"

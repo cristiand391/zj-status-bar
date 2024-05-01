@@ -17,7 +17,7 @@ fn cursors(focused_clients: &[ClientId], palette: Palette) -> (Vec<ANSIString>, 
     (cursors, len)
 }
 
-pub fn render_tab(text: String, tab: &TabInfo, palette: Palette, separator: &str) -> LinePart {
+pub fn render_tab(text: String, tab: &TabInfo, palette: Palette, separator: &str, alternate_color: bool) -> LinePart {
     let focused_clients = tab.other_focused_clients.as_slice();
     let separator_width = separator.width();
     let background_color = if tab.active {
@@ -26,6 +26,8 @@ pub fn render_tab(text: String, tab: &TabInfo, palette: Palette, separator: &str
         } else {
             palette.green
         }
+    } else if alternate_color {
+        palette.red
     } else {
         palette.fg
     };
@@ -80,13 +82,14 @@ pub fn tab_style(
     tab: &TabInfo,
     palette: Palette,
     capabilities: PluginCapabilities,
+    alternate_color: bool,
 ) -> LinePart {
     let separator = tab_separator(capabilities);
     if tab.is_sync_panes_active {
         tabname.push_str(" (Sync)");
     }
 
-    render_tab(tabname, tab, palette, separator)
+    render_tab(tabname, tab, palette, separator, alternate_color)
 }
 
 pub(crate) fn get_tab_to_focus(
