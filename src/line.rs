@@ -202,7 +202,11 @@ fn tab_line_prefix(
         })
     }
     let mode_part = format!("{:?}", mode).to_uppercase();
-    let mode_part_padded = format!("{:^mode_part_width$}", mode_part, mode_part_width = mode_part.width() + 2);
+    let mode_part_padded = format!(
+        "{:^mode_part_width$}",
+        mode_part,
+        mode_part_width = mode_part.width() + 2
+    );
     let mode_part_len = mode_part_padded.width();
     let mode_part_styled_text = if mode == InputMode::Locked {
         style!(locked_mode_color, bg_color)

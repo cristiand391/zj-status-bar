@@ -21,12 +21,14 @@ pub struct LinePart {
 
 #[derive(Debug, Default, Clone)]
 struct WatchStatus {
+    success: bool,
     viewed: bool,
     alternate_color: bool,
 }
 
 #[derive(Default)]
 struct State {
+    pane_info: PaneManifest,
     watch_tab_indexes: HashMap<usize, WatchStatus>,
     tabs: Vec<TabInfo>,
     active_tab_idx: usize,
@@ -46,10 +48,11 @@ impl ZellijPlugin for State {
         ]);
         subscribe(&[
             EventType::TabUpdate,
+            EventType::PaneUpdate,
             EventType::ModeUpdate,
             EventType::Mouse,
             EventType::PermissionRequestResult,
-            EventType::Timer, 
+            EventType::Timer,
         ]);
         // Set as selectable on load so user can accept/deny perms.
         // After the first load, if the user allowed access, the perm event handler
@@ -60,6 +63,9 @@ impl ZellijPlugin for State {
     fn update(&mut self, event: Event) -> bool {
         let mut should_render = false;
         match event {
+            Event::PaneUpdate(pane_info) => {
+                self.pane_info = pane_info;
+            }
             Event::ModeUpdate(mode_info) => {
                 if self.mode_info != mode_info {
                     should_render = true;
@@ -68,15 +74,19 @@ impl ZellijPlugin for State {
             }
             Event::Timer(_) => {
                 let watch_tab_indexes = &self.watch_tab_indexes.clone();
-                
+
                 let mut fired_timer = false;
 
                 for (tab_idx, watch_status) in watch_tab_indexes {
                     if !watch_status.viewed {
-                        self.watch_tab_indexes.insert(*tab_idx, WatchStatus {
-                            viewed: false,
-                            alternate_color: !watch_status.alternate_color
-                        });
+                        self.watch_tab_indexes.insert(
+                            *tab_idx,
+                            WatchStatus {
+                                success: watch_status.success,
+                                viewed: false,
+                                alternate_color: !watch_status.alternate_color,
+                            },
+                        );
 
                         if !fired_timer {
                             set_timeout(1.0);
@@ -129,18 +139,41 @@ impl ZellijPlugin for State {
         let mut should_render = false;
         match pipe_message.source {
             PipeSource::Cli(_) => {
-                if let Some(payload) = pipe_message.payload {
-                    let empty_map = self.watch_tab_indexes.is_empty();
+                if pipe_message.name == "zj-status-bar:process_status" {
+                    if let (Some(pane_id_str), Some(exit_code_str)) = (
+                        pipe_message.args.get("pane_id"),
+                        pipe_message.args.get("exit_code"),
+                    ) {
+                        let pane_id: u32 = pane_id_str.parse().unwrap();
+                        let exit_code: u32 = exit_code_str.parse().unwrap();
 
-                    self.watch_tab_indexes.insert(payload.parse().unwrap(), WatchStatus {
-                        viewed: false,
-                        alternate_color: true
-                    }) ;
-                    if empty_map {
-                        set_timeout(1.0);
-                        should_render = true;
+                        for (tab_idx, pane_vec) in &mut self.pane_info.panes {
+                            // skip panes in current tab
+                            if *tab_idx == self.active_tab_idx - 1 {
+                                continue;
+                            }
+
+                            // find tab position containing the pane by its id.
+                            if pane_vec.iter().find(|p| p.id == pane_id).is_some() {
+                                let empty_map = self.watch_tab_indexes.is_empty();
+
+                                // TODO: this should be 0-indexed
+                                self.watch_tab_indexes.insert(
+                                    tab_idx + 1,
+                                    WatchStatus {
+                                        success: exit_code == 0,
+                                        viewed: false,
+                                        alternate_color: true,
+                                    },
+                                );
+
+                                if empty_map {
+                                    set_timeout(1.0);
+                                    should_render = true;
+                                }
+                            }
+                        }
                     }
-                   
                 }
             }
             // PipeSource::Plugin(source_plugin_id) => {
@@ -152,7 +185,6 @@ impl ZellijPlugin for State {
         }
         should_render
     }
-
 
     fn render(&mut self, _rows: usize, cols: usize) {
         if self.tabs.is_empty() {
@@ -179,9 +211,11 @@ impl ZellijPlugin for State {
             tabname.insert_str(0, &format!("{} ", t.position + 1));
 
             let mut alternate_color = false;
+            let mut success = false;
 
             if let Some(i) = self.watch_tab_indexes.get(&(&t.position + 1)) {
                 alternate_color = i.alternate_color;
+                success = i.success;
 
                 if t.active {
                     self.watch_tab_indexes.remove(&(t.position + 1));
@@ -193,7 +227,8 @@ impl ZellijPlugin for State {
                 t,
                 self.mode_info.style.colors,
                 self.mode_info.capabilities,
-                alternate_color
+                alternate_color,
+                success,
             );
             all_tabs.push(tab);
         }
