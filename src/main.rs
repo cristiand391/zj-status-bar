@@ -12,6 +12,8 @@ use zellij_tile::prelude::*;
 use crate::line::tab_line;
 use crate::tab::tab_style;
 
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Default)]
 pub struct LinePart {
     part: String,
@@ -19,7 +21,7 @@ pub struct LinePart {
     tab_index: Option<usize>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 struct WatchStatus {
     success: bool,
     viewed: bool,
@@ -45,6 +47,7 @@ impl ZellijPlugin for State {
         request_permission(&[
             PermissionType::ReadApplicationState,
             PermissionType::ChangeApplicationState,
+            PermissionType::MessageAndLaunchOtherPlugins,
         ]);
         subscribe(&[
             EventType::TabUpdate,
@@ -94,6 +97,21 @@ impl ZellijPlugin for State {
                             fired_timer = true;
                         }
                     }
+                }
+
+                // Broadcast the state of tab alerts to all instances of `zj-status-bar` for new
+                // instances to "catch up" on previous alerts.
+                //
+                // Only broadcast state if there's something to share.
+                // There's a scenario where after visiting the last tab with an alert you end up
+                // with an empty state before the last `Timer` event is fired, broadcasting it
+                // would cause an infinite loop.
+                if !self.watch_tab_indexes.is_empty() {
+                    pipe_message_to_plugin(
+                        MessageToPlugin::new("zj-status-bar:process_status:broadcast")
+                            .with_plugin_url("zj-status-bar")
+                            .with_payload(serde_json::to_string(&self.watch_tab_indexes).unwrap()),
+                    )
                 }
             }
             Event::TabUpdate(tabs) => {
@@ -176,9 +194,22 @@ impl ZellijPlugin for State {
                     }
                 }
             }
-            // PipeSource::Plugin(source_plugin_id) => {
-            //     // pipes can also arrive from other plugins
-            // }
+            PipeSource::Plugin(_source_plugin_id) => {
+                // This message is sent by other plugin instances on each `Timer` event and
+                // contains the state of tabs alerts.
+                //
+                // Only read it if the current instance doesn't contain any info (new tab created
+                // after alerts were piped from a pane) to "catch up" and render them.
+                if pipe_message.is_private
+                    && pipe_message.name == "zj-status-bar:process_status:broadcast"
+                    && self.watch_tab_indexes.is_empty()
+                {
+                    self.watch_tab_indexes =
+                        serde_json::from_str(&pipe_message.payload.unwrap()).unwrap();
+
+                    set_timeout(0.0);
+                }
+            }
             _ => {
                 should_render = false;
             }
