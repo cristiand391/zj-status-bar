@@ -22,16 +22,15 @@ pub struct LinePart {
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
-struct WatchStatus {
+struct TabAlert {
     success: bool,
-    viewed: bool,
     alternate_color: bool,
 }
 
 #[derive(Default)]
 struct State {
     pane_info: PaneManifest,
-    watch_tab_indexes: HashMap<usize, WatchStatus>,
+    tab_alerts: HashMap<usize, TabAlert>,
     tabs: Vec<TabInfo>,
     active_tab_idx: usize,
     mode_info: ModeInfo,
@@ -76,28 +75,22 @@ impl ZellijPlugin for State {
                 self.mode_info = mode_info
             }
             Event::Timer(_) => {
-                let watch_tab_indexes = &self.watch_tab_indexes.clone();
+                // This timer is fired in the `pipe` lifecycle method and it's guaranteed there
+                // will be at least one alert.
+                let tab_alert_indexes = &self.tab_alerts.clone();
 
-                let mut fired_timer = false;
-
-                for (tab_idx, watch_status) in watch_tab_indexes {
-                    if !watch_status.viewed {
-                        self.watch_tab_indexes.insert(
-                            *tab_idx,
-                            WatchStatus {
-                                success: watch_status.success,
-                                viewed: false,
-                                alternate_color: !watch_status.alternate_color,
-                            },
-                        );
-
-                        if !fired_timer {
-                            set_timeout(1.0);
-                            should_render = true;
-                            fired_timer = true;
-                        }
-                    }
+                for (tab_idx, tab_alert) in tab_alert_indexes {
+                    self.tab_alerts.insert(
+                        *tab_idx,
+                        TabAlert {
+                            success: tab_alert.success,
+                            alternate_color: !tab_alert.alternate_color,
+                        },
+                    );
                 }
+
+                set_timeout(1.0);
+                should_render = true;
 
                 // Broadcast the state of tab alerts to all instances of `zj-status-bar` for new
                 // instances to "catch up" on previous alerts.
@@ -106,11 +99,11 @@ impl ZellijPlugin for State {
                 // There's a scenario where after visiting the last tab with an alert you end up
                 // with an empty state before the last `Timer` event is fired, broadcasting it
                 // would cause an infinite loop.
-                if !self.watch_tab_indexes.is_empty() {
+                if !self.tab_alerts.is_empty() {
                     pipe_message_to_plugin(
                         MessageToPlugin::new("zj-status-bar:process_status:broadcast")
-                            .with_plugin_url("zj-status-bar")
-                            .with_payload(serde_json::to_string(&self.watch_tab_indexes).unwrap()),
+                            .with_plugin_url("zellij:OWN_URL")
+                            .with_payload(serde_json::to_string(&self.tab_alerts).unwrap()),
                     )
                 }
             }
@@ -173,19 +166,19 @@ impl ZellijPlugin for State {
 
                             // find tab position containing the pane by its id.
                             if pane_vec.iter().find(|p| p.id == pane_id).is_some() {
-                                let empty_map = self.watch_tab_indexes.is_empty();
+                                let first_alert = self.tab_alerts.is_empty();
 
-                                // TODO: this should be 0-indexed
-                                self.watch_tab_indexes.insert(
-                                    tab_idx + 1,
-                                    WatchStatus {
+                                self.tab_alerts.insert(
+                                    *tab_idx,
+                                    TabAlert {
                                         success: exit_code == 0,
-                                        viewed: false,
                                         alternate_color: true,
                                     },
                                 );
 
-                                if empty_map {
+                                // Only fire timer/re-render on the first alert, when the 1st timer
+                                // expires the state is updated there and new timer is set.
+                                if first_alert {
                                     set_timeout(1.0);
                                     should_render = true;
                                 }
@@ -202,12 +195,13 @@ impl ZellijPlugin for State {
                 // after alerts were piped from a pane) to "catch up" and render them.
                 if pipe_message.is_private
                     && pipe_message.name == "zj-status-bar:process_status:broadcast"
-                    && self.watch_tab_indexes.is_empty()
+                    && self.tab_alerts.is_empty()
                 {
-                    self.watch_tab_indexes =
-                        serde_json::from_str(&pipe_message.payload.unwrap()).unwrap();
+                    self.tab_alerts = serde_json::from_str(&pipe_message.payload.unwrap()).unwrap();
 
-                    set_timeout(0.0);
+                    // fire 1st timer/re-render
+                    set_timeout(1.0);
+                    should_render = true;
                 }
             }
             _ => {
@@ -244,12 +238,12 @@ impl ZellijPlugin for State {
             let mut alternate_color = false;
             let mut success = false;
 
-            if let Some(i) = self.watch_tab_indexes.get(&(&t.position + 1)) {
+            if let Some(i) = self.tab_alerts.get(&t.position) {
                 alternate_color = i.alternate_color;
                 success = i.success;
 
                 if t.active {
-                    self.watch_tab_indexes.remove(&(t.position + 1));
+                    self.tab_alerts.remove(&t.position);
                 }
             }
 
