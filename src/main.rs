@@ -77,16 +77,12 @@ impl ZellijPlugin for State {
             Event::Timer(_) => {
                 // This timer is fired in the `pipe` lifecycle method and it's guaranteed there
                 // will be at least one alert.
-                let tab_alert_indexes = &self.tab_alerts.clone();
 
-                for (tab_idx, tab_alert) in tab_alert_indexes {
-                    self.tab_alerts.insert(
-                        *tab_idx,
-                        TabAlert {
-                            success: tab_alert.success,
-                            alternate_color: !tab_alert.alternate_color,
-                        },
-                    );
+                for tab_alert in self.tab_alerts.values_mut() {
+                    *tab_alert = TabAlert {
+                        success: tab_alert.success,
+                        alternate_color: !tab_alert.alternate_color,
+                    }
                 }
 
                 set_timeout(1.0);
@@ -158,13 +154,13 @@ impl ZellijPlugin for State {
                         let pane_id: u32 = pane_id_str.parse().unwrap();
                         let exit_code: u32 = exit_code_str.parse().unwrap();
 
-                        for (tab_idx, pane_vec) in &mut self.pane_info.panes {
+                        for (tab_idx, pane_vec) in &self.pane_info.panes {
                             // skip panes in current tab
                             if *tab_idx == self.active_tab_idx - 1 {
                                 continue;
                             }
 
-                            // find tab position containing the pane by its id.
+                            // find index of tab containing the pane
                             if pane_vec.iter().find(|p| p.id == pane_id).is_some() {
                                 let first_alert = self.tab_alerts.is_empty();
 
@@ -182,6 +178,9 @@ impl ZellijPlugin for State {
                                     set_timeout(1.0);
                                     should_render = true;
                                 }
+
+                                // tab index found, exit loop
+                                break;
                             }
                         }
                     }
