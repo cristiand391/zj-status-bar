@@ -108,6 +108,7 @@ impl ZellijPlugin for State {
                     // tabs are indexed starting from 1 so we need to add 1
                     let active_tab_idx = active_tab_index + 1;
                     if self.active_tab_idx != active_tab_idx || self.tabs != tabs {
+                        self.tab_alerts.remove(&active_tab_index);
                         should_render = true;
                     }
                     self.active_tab_idx = active_tab_idx;
@@ -161,7 +162,7 @@ impl ZellijPlugin for State {
                             }
 
                             // find index of tab containing the pane
-                            if pane_vec.iter().find(|p| p.id == pane_id).is_some() {
+                            if pane_vec.iter().any(|p| p.id == pane_id) {
                                 let first_alert = self.tab_alerts.is_empty();
 
                                 self.tab_alerts.insert(
@@ -240,10 +241,6 @@ impl ZellijPlugin for State {
             if let Some(i) = self.tab_alerts.get(&t.position) {
                 alternate_color = i.alternate_color;
                 success = i.success;
-
-                if t.active {
-                    self.tab_alerts.remove(&t.position);
-                }
             }
 
             let tab = tab_style(
