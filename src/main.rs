@@ -152,8 +152,14 @@ impl ZellijPlugin for State {
                         pipe_message.args.get("pane_id"),
                         pipe_message.args.get("exit_code"),
                     ) {
-                        let pane_id: u32 = pane_id_str.parse().unwrap();
-                        let exit_code: u32 = exit_code_str.parse().unwrap();
+                        let pane_id: u32 = match pane_id_str.parse() {
+                            Ok(int) => int,
+                            Err(..) => return false,
+                        };
+                        let exit_code: u32 = match exit_code_str.parse() {
+                            Ok(int) => int,
+                            Err(..) => return false,
+                        };
 
                         for (tab_idx, pane_vec) in &self.pane_info.panes {
                             // skip panes in current tab
