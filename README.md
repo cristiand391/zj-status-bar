@@ -51,7 +51,7 @@ Always keep an eye on long-running processes, even if they are on different tabs
 
 [tab-alerts-demo.webm](https://github.com/cristiand391/zj-status-bar/assets/6853656/953d7abf-3011-48d4-ad38-f45c96c3583a)
 
-When running commands via `zw` you'll get a green/red alert (based on the exit code > 0) on the tab section when you are in a different tab.
+When running commands via `zw` you'll get a green/red alert (based on the exit code > 0) on the tab section when you are on a different tab.
 The alerts are rendered every 1s and are cleared once you focus on that tab.
 
 Add the `zw` helper to your shell setup:
@@ -68,8 +68,7 @@ then pass it the command you want to watch
 `zw cargo build`
 
 > [!NOTE]  
-> If you want to chain multiple commands make sure to wrap them in quotes (e.g `zw 'sleep 3 && cargo build'`), otherwise `zw` will send the exit code of the first command.
-
+> If you want to chain multiple commands make sure to wrap them in quotes (e.g `zw 'sleep 3 && cargo build'`), otherwise your shell will interpret it as 2 different commands and you'll only get an alert about the first one.
 
 ## Development
 
