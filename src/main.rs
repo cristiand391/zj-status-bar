@@ -75,27 +75,22 @@ impl ZellijPlugin for State {
                 self.mode_info = mode_info
             }
             Event::Timer(_) => {
-                // This timer is fired in the `pipe` lifecycle method and it's guaranteed there
-                // will be at least one alert.
-
-                for tab_alert in self.tab_alerts.values_mut() {
-                    *tab_alert = TabAlert {
-                        success: tab_alert.success,
-                        alternate_color: !tab_alert.alternate_color,
-                    }
-                }
-
-                set_timeout(1.0);
-                should_render = true;
-
-                // Broadcast the state of tab alerts to all instances of `zj-status-bar` for new
-                // instances to "catch up" on previous alerts.
-                //
-                // Only broadcast state if there's something to share.
-                // There's a scenario where after visiting the last tab with an alert you end up
-                // with an empty state before the last `Timer` event is fired, broadcasting it
-                // would cause an infinite loop.
+                // Skip event if there's no alerts.
+                // This ensures the last timer fired after visited the last tab with an alert don't
+                // cause an infinite re-render loop.
                 if !self.tab_alerts.is_empty() {
+                    for tab_alert in self.tab_alerts.values_mut() {
+                        *tab_alert = TabAlert {
+                            success: tab_alert.success,
+                            alternate_color: !tab_alert.alternate_color,
+                        }
+                    }
+
+                    set_timeout(1.0);
+                    should_render = true;
+
+                    // Broadcast the state of tab alerts to all instances of `zj-status-bar` for new
+                    // instances to "catch up" on previous alerts.
                     pipe_message_to_plugin(
                         MessageToPlugin::new("zj-status-bar:plugin:tab_alert:broadcast")
                             .with_plugin_url("zellij:OWN_URL")
