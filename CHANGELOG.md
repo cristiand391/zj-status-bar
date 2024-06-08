@@ -1,4 +1,13 @@
-# 0.2.0 (2024-04-01)
+# [0.3.0](https://github.com/cristiand391/zj-status-bar/compare/0.2.0...0.3.0) (2024-06-08)
+
+
+### Features
+
+* tab alerts ([#4](https://github.com/cristiand391/zj-status-bar/issues/4)) ([81a0d4b](https://github.com/cristiand391/zj-status-bar/commit/81a0d4b4bb7515b676770abbe628a1b1524662bc))
+
+
+
+# [0.2.0](https://github.com/cristiand391/zj-status-bar/compare/0f3799d5acdf88ab913dbde2eb054d6390c1bc9b...0.2.0) (2024-04-01)
 
 
 ### Bug Fixes
