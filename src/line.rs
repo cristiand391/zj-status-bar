@@ -202,7 +202,11 @@ fn tab_line_prefix(
         })
     }
     let mode_part = format!("{:?}", mode).to_uppercase();
-    let mode_part_padded = format!("{:^mode_part_width$}", mode_part, mode_part_width = mode_part.width() + 2);
+    let mode_part_padded = format!(
+        "{:^mode_part_width$}",
+        mode_part,
+        mode_part_width = mode_part.width() + 2
+    );
     let mode_part_len = mode_part_padded.width();
     let mode_part_styled_text = if mode == InputMode::Locked {
         style!(locked_mode_color, bg_color)
@@ -347,7 +351,7 @@ fn swap_layout_status(
                 "{}{}{}",
                 prefix_separator, swap_layout_name, suffix_separator
             );
-            let (part, full_len) = (format!("{}", swap_layout_indicator), swap_layout_name_len);
+            let (part, full_len) = (swap_layout_indicator.to_string(), swap_layout_name_len);
             let short_len = swap_layout_name_len + 1; // 1 is the space between
             if full_len <= max_len {
                 Some(LinePart {

@@ -3,6 +3,7 @@ mod tab;
 
 use std::cmp::{max, min};
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::convert::TryInto;
 
 use tab::get_tab_to_focus;
@@ -11,6 +12,8 @@ use zellij_tile::prelude::*;
 use crate::line::tab_line;
 use crate::tab::tab_style;
 
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Default)]
 pub struct LinePart {
     part: String,
@@ -18,8 +21,16 @@ pub struct LinePart {
     tab_index: Option<usize>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+struct TabAlert {
+    success: bool,
+    alternate_color: bool,
+}
+
 #[derive(Default)]
 struct State {
+    pane_info: PaneManifest,
+    tab_alerts: HashMap<usize, TabAlert>,
     tabs: Vec<TabInfo>,
     active_tab_idx: usize,
     mode_info: ModeInfo,
@@ -35,12 +46,15 @@ impl ZellijPlugin for State {
         request_permission(&[
             PermissionType::ReadApplicationState,
             PermissionType::ChangeApplicationState,
+            PermissionType::MessageAndLaunchOtherPlugins,
         ]);
         subscribe(&[
             EventType::TabUpdate,
+            EventType::PaneUpdate,
             EventType::ModeUpdate,
             EventType::Mouse,
             EventType::PermissionRequestResult,
+            EventType::Timer,
         ]);
         // Set as selectable on load so user can accept/deny perms.
         // After the first load, if the user allowed access, the perm event handler
@@ -51,17 +65,45 @@ impl ZellijPlugin for State {
     fn update(&mut self, event: Event) -> bool {
         let mut should_render = false;
         match event {
+            Event::PaneUpdate(pane_info) => {
+                self.pane_info = pane_info;
+            }
             Event::ModeUpdate(mode_info) => {
                 if self.mode_info != mode_info {
                     should_render = true;
                 }
                 self.mode_info = mode_info
             }
+            Event::Timer(_) => {
+                // Skip event if there's no alerts.
+                // This ensures the last timer fired after visited the last tab with an alert don't
+                // cause an infinite re-render loop.
+                if !self.tab_alerts.is_empty() {
+                    for tab_alert in self.tab_alerts.values_mut() {
+                        *tab_alert = TabAlert {
+                            success: tab_alert.success,
+                            alternate_color: !tab_alert.alternate_color,
+                        }
+                    }
+
+                    set_timeout(1.0);
+                    should_render = true;
+
+                    // Broadcast the state of tab alerts to all instances of `zj-status-bar` for new
+                    // instances to "catch up" on previous alerts.
+                    pipe_message_to_plugin(
+                        MessageToPlugin::new("zj-status-bar:plugin:tab_alert:broadcast")
+                            .with_plugin_url("zellij:OWN_URL")
+                            .with_payload(serde_json::to_string(&self.tab_alerts).unwrap()),
+                    )
+                }
+            }
             Event::TabUpdate(tabs) => {
                 if let Some(active_tab_index) = tabs.iter().position(|t| t.active) {
                     // tabs are indexed starting from 1 so we need to add 1
                     let active_tab_idx = active_tab_index + 1;
                     if self.active_tab_idx != active_tab_idx || self.tabs != tabs {
+                        self.tab_alerts.remove(&active_tab_index);
                         should_render = true;
                     }
                     self.active_tab_idx = active_tab_idx;
@@ -96,6 +138,80 @@ impl ZellijPlugin for State {
         should_render
     }
 
+    fn pipe(&mut self, pipe_message: PipeMessage) -> bool {
+        let mut should_render = false;
+        match pipe_message.source {
+            PipeSource::Cli(_) => {
+                if pipe_message.name == "zj-status-bar:cli:tab_alert" {
+                    if let (Some(pane_id_str), Some(exit_code_str)) = (
+                        pipe_message.args.get("pane_id"),
+                        pipe_message.args.get("exit_code"),
+                    ) {
+                        let pane_id: u32 = match pane_id_str.parse() {
+                            Ok(int) => int,
+                            Err(..) => return false,
+                        };
+                        let exit_code: u32 = match exit_code_str.parse() {
+                            Ok(int) => int,
+                            Err(..) => return false,
+                        };
+
+                        for (tab_idx, pane_vec) in &self.pane_info.panes {
+                            // skip panes in current tab
+                            if *tab_idx == self.active_tab_idx - 1 {
+                                continue;
+                            }
+
+                            // find index of tab containing the pane
+                            if pane_vec.iter().any(|p| p.id == pane_id) {
+                                let first_alert = self.tab_alerts.is_empty();
+
+                                self.tab_alerts.insert(
+                                    *tab_idx,
+                                    TabAlert {
+                                        success: exit_code == 0,
+                                        alternate_color: true,
+                                    },
+                                );
+
+                                // Only fire timer/re-render on the first alert, when the 1st timer
+                                // expires the state is updated there and new timer is set.
+                                if first_alert {
+                                    set_timeout(1.0);
+                                    should_render = true;
+                                }
+
+                                // tab index found, exit loop
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            PipeSource::Plugin(_source_plugin_id) => {
+                // This message is sent by other plugin instances on each `Timer` event and
+                // contains the state of tabs alerts.
+                //
+                // Only read it if the current instance doesn't contain any info (new tab created
+                // after alerts were piped from a pane) to "catch up" and render them.
+                if pipe_message.is_private
+                    && pipe_message.name == "zj-status-bar:plugin:tab_alert:broadcast"
+                    && self.tab_alerts.is_empty()
+                {
+                    self.tab_alerts = serde_json::from_str(&pipe_message.payload.unwrap()).unwrap();
+
+                    // fire 1st timer/re-render
+                    set_timeout(1.0);
+                    should_render = true;
+                }
+            }
+            _ => {
+                should_render = false;
+            }
+        }
+        should_render
+    }
+
     fn render(&mut self, _rows: usize, cols: usize) {
         if self.tabs.is_empty() {
             return;
@@ -120,11 +236,21 @@ impl ZellijPlugin for State {
             // insert tab index
             tabname.insert_str(0, &format!("{} ", t.position + 1));
 
+            let mut alternate_color = false;
+            let mut success = false;
+
+            if let Some(i) = self.tab_alerts.get(&t.position) {
+                alternate_color = i.alternate_color;
+                success = i.success;
+            }
+
             let tab = tab_style(
                 tabname,
                 t,
                 self.mode_info.style.colors,
                 self.mode_info.capabilities,
+                alternate_color,
+                success,
             );
             all_tabs.push(tab);
         }
